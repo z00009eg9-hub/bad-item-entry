@@ -1,0 +1,6 @@
+*
+!/.gitignore
+!/不良明細輸入系統.html
+!/scanner_main.cs
+!/serve.py
+!/custom_reasons.txt

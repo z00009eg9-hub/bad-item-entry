@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>不良明細輸入系統</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Arial','Microsoft JhengHei',sans-serif;background:#ECF0F5;color:#222;min-height:100vh;padding-bottom:44px}
+
+/* ── Top bar ── */
+.top-bar{
+  background:linear-gradient(135deg,#1F3864 0%,#2E5D9B 100%);
+  color:#fff;padding:11px 20px;
+  display:flex;align-items:center;gap:14px;
+  box-shadow:0 3px 10px rgba(0,0,0,.35);
+  position:sticky;top:0;z-index:200;
+}
+.top-bar h1{font-size:20px;white-space:nowrap}
+.top-bar .spacer{flex:1}
+.id-badge{
+  background:#F0A500;color:#1F3864;
+  padding:3px 14px;border-radius:20px;
+  font-weight:700;font-size:16px;letter-spacing:1px;
+  display:none;
+}
+.count-chip{
+  background:rgba(255,255,255,.18);
+  padding:3px 11px;border-radius:12px;font-size:14px;
+}
+.scan-dot{
+  width:9px;height:9px;border-radius:50%;
+  background:#555;transition:background .25s,box-shadow .25s;
+  flex-shrink:0;
+}
+.scan-dot.on{background:#4CAF50;box-shadow:0 0 7px #4CAF50}
+
+/* ── Control bar ── */
+.ctrl-bar{
+  background:#fff;padding:9px 20px;
+  display:flex;align-items:center;gap:10px;
+  border-bottom:2px solid #D8DEE8;flex-wrap:wrap;
+}
+.ctrl-label{font-weight:700;font-size:15px;white-space:nowrap;color:#444}
+
+select#id-sel{
+  padding:6px 10px;font-size:15px;
+  border:2px solid #2E5D9B;border-radius:6px;
+  background:#fff;cursor:pointer;min-width:155px;
+}
+select#id-sel:focus{outline:none;border-color:#F0A500}
+
+.btn{
+  padding:6px 16px;font-size:14px;
+  border:none;border-radius:6px;cursor:pointer;
+  font-weight:700;transition:filter .15s,transform .1s;
+  white-space:nowrap;
+}
+.btn:hover:not(:disabled){filter:brightness(1.12);transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
+.btn-green{background:#1A6B3C;color:#fff}
+.btn-blue{background:#2E5D9B;color:#fff}
+.btn-red{background:#C0392B;color:#fff}
+.btn-gray{background:#777;color:#fff}
+
+/* ── Hint ── */
+.hint{
+  background:#FFF8E1;border-left:4px solid #F0A500;
+  padding:8px 20px;font-size:14px;color:#666;
+  display:none;
+}
+.hint.on{display:block}
+kbd{
+  background:#eee;border:1px solid #bbb;border-radius:3px;
+  padding:1px 5px;font-size:13px;
+}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto;background:#fff}
+table{width:100%;border-collapse:collapse;min-width:580px}
+
+thead tr{background:#1F3864;color:#fff;user-select:none}
+th{
+  padding:9px 7px;text-align:center;
+  font-size:14px;border:1px solid #3a5a8a;white-space:nowrap;
+}
+
+tbody tr{transition:background .08s}
+tbody tr:nth-child(odd){background:#FAFBFE}
+tbody tr:nth-child(even){background:#F0F4FF}
+tbody tr.cur{background:#FFF9C4!important}
+tbody tr:hover{background:#E8F0FB!important}
+
+td{padding:2px 3px;border:1px solid #DDE3EF;vertical-align:middle}
+td.n{text-align:center;color:#777;font-size:13px;width:44px}
+td.serial{width:220px}
+td.issue{min-width:230px}
+td.remark{}
+td.del{text-align:center;width:34px}
+
+.inp-serial{
+  width:100%;border:1px solid transparent;
+  background:transparent;font-size:15px;
+  padding:5px 7px;border-radius:4px;
+  font-family:'Consolas','Monaco',monospace;
+}
+.inp-serial:focus{
+  background:#FFFDE7;border-color:#2E5D9B;outline:none;
+  box-shadow:0 0 0 2px rgba(46,93,155,.2);
+}
+
+/* ── Issue display (table cell) ── */
+.issue-display{
+  width:100%;min-height:32px;
+  border:1px solid transparent;background:transparent;
+  font-size:15px;padding:5px 7px;border-radius:4px;
+  cursor:pointer;display:flex;align-items:center;gap:4px;
+  transition:background .1s,border-color .1s;
+  font-family:inherit;
+}
+.issue-display:hover,.issue-display:focus{
+  background:#F3E5F5;border-color:#7B1FA2;outline:none;
+  box-shadow:0 0 0 2px rgba(123,31,162,.18);
+}
+.issue-val{flex:1;color:#aaa;line-height:1.4;word-break:break-all}
+.issue-display.filled .issue-val{color:#222;font-weight:500}
+.issue-arr{color:#999;font-size:11px;flex-shrink:0}
+
+/* ── Issue Picker Modal ── */
+.picker-modal{
+  background:#fff;border-radius:14px;
+  max-width:640px;width:96%;max-height:82vh;
+  display:flex;flex-direction:column;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);overflow:hidden;
+}
+.picker-head{
+  background:linear-gradient(135deg,#1F3864 0%,#2E5D9B 100%);
+  color:#fff;padding:14px 20px;
+  display:flex;align-items:center;gap:10px;
+  font-size:18px;font-weight:700;flex-shrink:0;
+}
+.picker-head .ph-id{
+  background:rgba(255,255,255,.2);padding:3px 12px;
+  border-radius:12px;font-size:14px;font-weight:normal;
+}
+.picker-head .ph-close{
+  margin-left:auto;background:none;border:none;color:#fff;
+  cursor:pointer;font-size:20px;line-height:1;padding:0 2px;opacity:.8;
+}
+.picker-head .ph-close:hover{opacity:1}
+.picker-body{padding:14px 16px;overflow-y:auto;flex:1}
+.picker-sec-lbl{
+  font-size:12px;font-weight:700;letter-spacing:.5px;
+  color:#2E5D9B;text-transform:uppercase;
+  margin:14px 0 8px;padding-bottom:5px;
+  border-bottom:1px solid #E8EEF7;
+}
+.picker-sec-lbl:first-child{margin-top:0}
+.picker-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(155px,1fr));
+  gap:8px;
+}
+.p-btn{
+  padding:11px 14px;
+  border:2px solid #DDE3EF;border-radius:9px;
+  background:#F8FAFF;cursor:pointer;
+  font-size:15px;font-family:inherit;
+  text-align:left;line-height:1.4;word-break:break-all;
+  transition:all .1s;
+}
+.p-btn:hover,.p-btn:focus{
+  border-color:#2E5D9B;background:#EEF3FB;
+  color:#1F3864;font-weight:700;outline:none;
+  transform:translateY(-1px);box-shadow:0 2px 8px rgba(46,93,155,.15);
+}
+.p-btn.custom{
+  border-color:#C39BD3;background:#FAF0FF;color:#5B0070;
+}
+.p-btn.custom:hover,.p-btn.custom:focus{
+  border-color:#7B1FA2;background:#F0E0FF;font-weight:700;
+  box-shadow:0 2px 8px rgba(123,31,162,.15);
+}
+
+.inp-remark{
+  width:100%;border:1px solid transparent;
+  background:transparent;font-size:14px;
+  padding:4px 7px;border-radius:4px;
+}
+.inp-remark:focus{
+  background:#E8F5E9;border-color:#388E3C;outline:none;
+}
+
+.del-btn{
+  background:none;border:none;color:#C0392B;
+  cursor:pointer;font-size:15px;padding:1px 5px;border-radius:4px;
+}
+.del-btn:hover{background:#FDECEA}
+
+/* ── Empty state ── */
+.empty{
+  text-align:center;padding:60px 20px;color:#aaa;
+}
+.empty .ico{font-size:44px;margin-bottom:10px}
+.empty p{font-size:14px}
+
+/* ── Status bar ── */
+.status-bar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:#1F3864;color:rgba(255,255,255,.75);
+  padding:6px 18px;font-size:13px;
+  display:flex;gap:20px;z-index:100;
+}
+
+/* ── Modal ── */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  display:none;align-items:center;justify-content:center;z-index:500;
+}
+.overlay.on{display:flex}
+.modal{
+  background:#fff;border-radius:12px;padding:24px;
+  max-width:360px;width:90%;
+  box-shadow:0 8px 32px rgba(0,0,0,.3);
+}
+.modal h3{margin-bottom:10px;color:#1F3864;font-size:18px}
+.modal p{color:#555;margin-bottom:18px;font-size:15px}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end}
+
+/* ── Scan flash ── */
+@keyframes scanFlash{0%{background:#FFFDE7}100%{background:transparent}}
+.flash-serial{animation:scanFlash .4s ease-out}
+
+/* ── Row highlight for last scanned ── */
+.just-filled{background:#E8F5E9!important}
+
+/* ── Issue Manager Modal ── */
+.modal-wide{max-width:480px}
+.imgt-id{
+  background:#2E5D9B;color:#fff;
+  padding:2px 10px;border-radius:10px;
+  font-size:15px;font-weight:normal;margin-left:8px;
+}
+.issue-mgr-list{
+  border:1px solid #DDE3EF;border-radius:8px;
+  max-height:280px;overflow-y:auto;
+  margin:12px 0;background:#FAFBFE;
+}
+.issue-section-hdr{
+  background:#E8EEF7;padding:5px 12px;
+  font-size:11px;font-weight:700;color:#2E5D9B;
+  letter-spacing:.5px;text-transform:uppercase;
+  position:sticky;top:0;
+}
+.issue-item{
+  display:flex;align-items:center;
+  padding:8px 12px;border-bottom:1px solid #EEF0F6;
+  font-size:15px;
+}
+.issue-item:last-child{border-bottom:none}
+.issue-item .itxt{flex:1;word-break:break-all}
+.issue-item.predefined .itxt{color:#666}
+.issue-item.custom .itxt{color:#1F3864;font-weight:500}
+.issue-tag{
+  font-size:12px;background:#E8EEF7;color:#888;
+  border-radius:8px;padding:2px 8px;margin-left:8px;white-space:nowrap;
+}
+.issue-del{
+  background:none;border:none;color:#C0392B;
+  cursor:pointer;font-size:15px;padding:1px 6px;
+  border-radius:4px;margin-left:6px;flex-shrink:0;
+}
+.issue-del:hover{background:#FDECEA}
+.issue-empty-hint{
+  text-align:center;padding:18px;color:#bbb;font-size:14px;
+}
+.issue-add-row{
+  display:flex;gap:8px;margin-top:4px;
+}
+.issue-add-row input{
+  flex:1;padding:8px 10px;
+  border:2px solid #DDE3EF;border-radius:6px;
+  font-size:15px;font-family:inherit;
+}
+.issue-add-row input:focus{
+  border-color:#2E5D9B;outline:none;
+  box-shadow:0 0 0 2px rgba(46,93,155,.15);
+}
+.issue-add-err{
+  color:#C0392B;font-size:13px;margin-top:5px;
+  min-height:18px;
+}
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <h1>&#128269; 不良明細輸入系統</h1>
+  <div class="spacer"></div>
+  <span class="scan-dot" id="sdot"></span>
+  <span class="id-badge" id="id-badge"></span>
+  <span class="count-chip" id="count-chip">共 0 筆</span>
+</div>
+
+<!-- Control bar -->
+<div class="ctrl-bar">
+  <span class="ctrl-label">選擇編號：</span>
+  <select id="id-sel" onchange="onIdChange(this.value)">
+    <option value="">— 請選擇編號 —</option>
+    <option value="10HA426H">10HA426H（TM23PL 下控板）</option>
+    <option value="10L33WJM">10L33WJM（TM24PL 下控板）</option>
+    <option value="10HA427X">10HA427X（TM23PL 下控板）</option>
+    <option value="10L3582H">10L3582H（TM24PL 下控板）</option>
+    <option value="110459U9">110459U9（控制器）</option>
+    <option value="10K13VAK">10K13VAK（控制器）</option>
+    <option value="10K146MK">10K146MK（控制器子板）</option>
+  </select>
+  <button class="btn btn-gray" id="btn-id-mgr" onclick="openIdMgr()">✎ 自訂編號</button>
+  <button class="btn btn-green"  id="btn-add"    onclick="addEmptyRow()"     disabled>＋ 新增列</button>
+  <button class="btn btn-gray"   id="btn-issues" onclick="openIssueMgr()"    disabled>⚙ 問題點</button>
+  <button class="btn btn-blue"   id="btn-export" onclick="exportExcel()"     disabled>&#11123; 匯出 Excel</button>
+  <button class="btn btn-red"    id="btn-clear"  onclick="confirmClear()"    disabled>清空</button>
+</div>
+
+<!-- Hint -->
+<div class="hint" id="hint">
+  &#128247; 掃描器掃入序號後自動跳至問題點；選好問題點按 <kbd>Enter</kbd> 或 <kbd>Tab</kbd> 新增下一列
+</div>
+
+<!-- Table -->
+<div class="tbl-wrap">
+  <table id="main-tbl">
+    <thead>
+      <tr>
+        <th style="width:40px">項次</th>
+        <th>序號</th>
+        <th>問題點</th>
+        <th>備註</th>
+        <th style="width:34px"></th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="5">
+        <div class="empty"><div class="ico">&#128203;</div><p>請先選擇編號</p></div>
+      </td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span id="st-id">編號：—</span>
+  <span id="st-cnt">筆數：0</span>
+  <span id="st-msg">就緒</span>
+</div>
+
+<!-- Confirm Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modal-title">&#9888; 確認</h3>
+    <p id="modal-msg"></p>
+    <div class="modal-btns">
+      <button class="btn btn-gray" onclick="closeModal()">取消</button>
+      <button class="btn btn-red" id="modal-ok">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- Issue Manager Modal -->
+<div class="overlay" id="issue-overlay">
+  <div class="modal modal-wide">
+    <h3>&#9881; 管理問題點 <span class="imgt-id" id="imgt-id"></span></h3>
+    <div class="issue-mgr-list" id="issue-mgr-list"></div>
+    <div class="issue-add-row">
+      <input type="text" id="new-issue-inp" maxlength="120"
+        placeholder="輸入新問題點描述，按 Enter 新增…"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomIssue();}">
+      <button class="btn btn-green" onclick="addCustomIssue()">＋ 新增</button>
+    </div>
+    <div class="issue-add-err" id="issue-add-err"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-blue" onclick="closeIssueMgr()">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom ID Manager Modal -->
+<div class="overlay" id="idmgr-overlay">
+  <div class="modal modal-wide">
+    <h3>&#9881; 自訂編號管理</h3>
+    <div class="issue-mgr-list" id="idmgr-list"></div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+      <input type="text" id="idmgr-id" maxlength="30" placeholder="編號代碼，例如 10ABC123">
+      <input type="text" id="idmgr-name" maxlength="60" placeholder="顯示名稱（選填），例如 控制器XX">
+      <textarea id="idmgr-issues" rows="4" placeholder="問題點清單，每行一個（最後會自動加上「其他」）"
+        style="width:100%;padding:8px 10px;border:2px solid #DDE3EF;border-radius:6px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+    </div>
+    <div class="issue-add-err" id="idmgr-err"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-gray" onclick="closeIdMgr()">關閉</button>
+      <button class="btn btn-green" onclick="addCustomId()">＋ 新增編號</button>
+    </div>
+  </div>
+</div>
+
+<!-- Issue Picker Modal -->
+<div class="overlay" id="picker-overlay">
+  <div class="picker-modal">
+    <div class="picker-head">
+      <span>選擇問題點</span>
+      <span class="ph-id" id="ph-id"></span>
+      <button class="ph-close" onclick="closeIssuePicker(true)" title="取消 (Esc)">✕</button>
+    </div>
+    <div class="picker-body" id="picker-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const TM_ISSUES = [
+  '版本問題','治具跳錯誤訊息','LED4閃','自動校準未過',
+  '人員偵測NG','機台測試NG','零件組裝問題','未過電',
+  '序號問題','速度未過','揚升未過','無法辨別"DE"',
+  '過電不動','睡眠未過','其他',
+];
+const TM_ISSUES_COL_D = ['Pass',...TM_ISSUES]; // 治具覆測原因用
+
+const PROBLEM_TYPES = {
+  '10HA426H': TM_ISSUES,
+  '10L33WJM': TM_ISSUES,
+  '10HA427X': TM_ISSUES,
+  '10L3582H': TM_ISSUES,
+  '110459U9': [
+    'The controller is unable to establish a connection with the test PC.',
+    '其他',
+  ],
+  '10K13VAK': [
+    '啟動馬達不運轉',
+    'ERROR 90 Steps jammed/煞車器未解鎖',
+    'ERROR 91 Steps jammed',
+    '馬達未運轉時,P701端子連接的電阻器異常發燙並出現燒焦味',
+    '運轉後又自動停止',
+    '其他',
+  ],
+  '10K146MK': [
+    'Console,控制器主板無電源',
+    'Console無電源',
+    '煞車器無法釋放(解鎖)',
+    '馬達啟動後又立即停止運轉',
+    'Error 20 Motor Control Error',
+    '無動作(無電源)',
+    '其他',
+  ],
+};
+
+const TM_IDS = new Set(['10HA426H','10L33WJM','10HA427X','10L3582H']);
+const SEQ_HEADER = {
+  '110459U9':'控制器 序號',
+  '10K13VAK':'控制器序號',
+  '10K146MK':'控制器子板 序號',
+};
+const FILE_PREFIX = {
+  '10HA426H':'TM23PL下控板不良明細',
+  '10L33WJM':'TM24PL下控板不良明細',
+  '10HA427X':'TM23PL下控板不良明細',
+  '10L3582H':'TM24PL下控板不良明細',
+  '110459U9':'控制器-不良明細',
+  '10K13VAK':'控制器不良明細',
+  '10K146MK':'控制器子板-不良明細',
+};
+
+// ── Custom ID storage (localStorage) ───────────────────────────────────────
+const CUSTOM_ID_KEY = 'custom_ids_v1';
+function loadCustomIds(){
+  try{ return JSON.parse(localStorage.getItem(CUSTOM_ID_KEY))||[]; }catch(e){ return []; }
+}
+function saveCustomIds(list){ localStorage.setItem(CUSTOM_ID_KEY, JSON.stringify(list)); }
+function getCustomId(id){ return loadCustomIds().find(c=>c.id===id); }
+
+function getProblemTypes(id){
+  if(PROBLEM_TYPES[id]) return PROBLEM_TYPES[id];
+  const c=getCustomId(id);
+  return c ? c.issues : [];
+}
+function getFilePrefix(id){
+  if(FILE_PREFIX[id]) return FILE_PREFIX[id];
+  const c=getCustomId(id);
+  return c ? c.name : id;
+}
+function getDisplayName(id){
+  const c=getCustomId(id);
+  return (c && c.name) ? `${id}（${c.name}）` : id;
+}
+
+function populateIdSelect(){
+  const sel=$('id-sel');
+  // remove previously injected custom <option> elements
+  [...sel.querySelectorAll('option[data-custom="1"]')].forEach(o=>o.remove());
+  loadCustomIds().forEach(c=>{
+    const opt=document.createElement('option');
+    opt.value=c.id;
+    opt.dataset.custom='1';
+    opt.textContent = c.name ? `${c.id}（${c.name}）` : c.id;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Custom ID Manager ───────────────────────────────────────────────────────
+function openIdMgr(){
+  $('idmgr-err').textContent='';
+  $('idmgr-id').value=''; $('idmgr-name').value=''; $('idmgr-issues').value='';
+  renderIdMgrList();
+  $('idmgr-overlay').classList.add('on');
+  setTimeout(()=>$('idmgr-id').focus(),80);
+}
+function closeIdMgr(){ $('idmgr-overlay').classList.remove('on'); }
+function renderIdMgrList(){
+  const list=loadCustomIds();
+  let html='';
+  if(list.length===0){
+    html='<div class="issue-empty-hint">尚無自訂編號，於下方輸入後新增</div>';
+  } else {
+    list.forEach((c,i)=>{
+      html+=`<div class="issue-item custom">
+        <span class="itxt">${esc(c.id)}${c.name?`（${esc(c.name)}）`:''}<br><span style="color:#999;font-size:12px">${c.issues.map(esc).join('、')}</span></span>
+        <button class="issue-del" onclick="deleteCustomId(${i})" title="刪除">✕</button>
+      </div>`;
+    });
+  }
+  $('idmgr-list').innerHTML=html;
+}
+function addCustomId(){
+  const errEl=$('idmgr-err');
+  errEl.textContent='';
+  const id=$('idmgr-id').value.trim();
+  const name=$('idmgr-name').value.trim();
+  const issuesRaw=$('idmgr-issues').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!id){ errEl.textContent='請輸入編號代碼'; $('idmgr-id').focus(); return; }
+  if(PROBLEM_TYPES[id] || getCustomId(id)){ errEl.textContent='此編號已存在'; return; }
+  const issues=[...issuesRaw];
+  if(!issues.includes('其他')) issues.push('其他');
+  const list=loadCustomIds();
+  list.push({id, name, issues});
+  saveCustomIds(list);
+  populateIdSelect();
+  renderIdMgrList();
+  $('idmgr-id').value=''; $('idmgr-name').value=''; $('idmgr-issues').value='';
+  $('idmgr-id').focus();
+}
+function deleteCustomId(idx){
+  const list=loadCustomIds();
+  const removed=list[idx];
+  list.splice(idx,1);
+  saveCustomIds(list);
+  populateIdSelect();
+  renderIdMgrList();
+  if(currentId===removed.id){
+    currentId=''; rows=[]; uidSeq=0;
+    $('id-sel').value='';
+    $('id-badge').style.display='none';
+    $('st-id').textContent='編號：—';
+    $('btn-add').disabled=true;
+    $('btn-issues').disabled=true;
+    $('hint').classList.remove('on');
+    syncUI(); renderTable();
+  }
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentId = '';
+let rows = [];       // [{uid, serial, issue, remark}]
+let uidSeq  = 0;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const esc = s => s==null?'':(s+'')
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const today = () => {
+  const d=new Date();
+  return d.getFullYear()+
+    String(d.getMonth()+1).padStart(2,'0')+
+    String(d.getDate()).padStart(2,'0');
+};
+function status(msg){ $('st-msg').textContent = msg; }
+function flashDot(){
+  const d=$('sdot'); d.classList.add('on');
+  clearTimeout(d._t); d._t=setTimeout(()=>d.classList.remove('on'),380);
+}
+function showModal(title,msg,onOk){
+  $('modal-title').textContent=title;
+  $('modal-msg').textContent=msg;
+  $('modal-ok').onclick=()=>{closeModal();onOk();};
+  $('overlay').classList.add('on');
+}
+function closeModal(){ $('overlay').classList.remove('on'); }
+
+function syncUI(){
+  const n = rows.filter(r=>r.serial||r.issue).length;
+  $('count-chip').textContent=`共 ${n} 筆`;
+  $('st-cnt').textContent=`筆數：${n}`;
+  $('btn-export').disabled = (n===0 || !currentId);
+  $('btn-clear').disabled  = (rows.length===0 && !currentId);
+}
+
+// ── Custom issue storage (localStorage) ────────────────────────────────────
+function loadCustom(id){
+  try{ return JSON.parse(localStorage.getItem('ci_'+id))||[]; }catch(e){ return []; }
+}
+function saveCustom(id,list){ localStorage.setItem('ci_'+id,JSON.stringify(list)); }
+function getAllIssues(id){
+  const pre = getProblemTypes(id)||[];
+  const cus = loadCustom(id);
+  return [...pre, ...cus.filter(c=>!pre.includes(c))];
+}
+
+function buildIssueOptions(){
+  const list = getAllIssues(currentId);
+  return '<option value="">— 選擇問題點 —</option>'+
+    list.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
+// ── Issue Manager ───────────────────────────────────────────────────────────
+function openIssueMgr(){
+  if(!currentId) return;
+  $('imgt-id').textContent = currentId;
+  $('issue-add-err').textContent = '';
+  renderIssueMgrList();
+  $('issue-overlay').classList.add('on');
+  setTimeout(()=>$('new-issue-inp').focus(), 80);
+}
+function closeIssueMgr(){
+  $('issue-overlay').classList.remove('on');
+  // picker 會即時讀 getAllIssues()，不需要 re-render 整表
+}
+function renderIssueMgrList(){
+  const pre = getProblemTypes(currentId)||[];
+  const cus = loadCustom(currentId);
+  let html = '';
+  html += '<div class="issue-section-hdr">預設選項</div>';
+  pre.forEach(iss=>{
+    html += `<div class="issue-item predefined">
+      <span class="itxt">${esc(iss)}</span>
+      <span class="issue-tag">預設</span>
+    </div>`;
+  });
+  html += '<div class="issue-section-hdr">自訂選項</div>';
+  if(cus.length===0){
+    html += '<div class="issue-empty-hint">尚無自訂選項，在下方輸入後新增</div>';
+  } else {
+    cus.forEach((iss,i)=>{
+      html += `<div class="issue-item custom">
+        <span class="itxt">${esc(iss)}</span>
+        <button class="issue-del" onclick="deleteCustomIssue(${i})" title="刪除">✕</button>
+      </div>`;
+    });
+  }
+  $('issue-mgr-list').innerHTML = html;
+}
+function addCustomIssue(){
+  const inp = $('new-issue-inp');
+  const val = inp.value.trim();
+  const errEl = $('issue-add-err');
+  errEl.textContent = '';
+  if(!val){ errEl.textContent='請輸入問題點描述'; inp.focus(); return; }
+  if(getAllIssues(currentId).includes(val)){
+    errEl.textContent='此問題點已存在'; inp.select(); return;
+  }
+  const cus = loadCustom(currentId);
+  cus.push(val);
+  saveCustom(currentId, cus);
+  inp.value = '';
+  inp.focus();
+  renderIssueMgrList();
+}
+function deleteCustomIssue(idx){
+  const cus = loadCustom(currentId);
+  const removed = cus[idx];
+  cus.splice(idx,1);
+  saveCustom(currentId, cus);
+  renderIssueMgrList();
+  // clear from any row that had this value selected
+  rows.forEach(r=>{ if(r.issue===removed) r.issue=''; });
+}
+
+// ── ID change ──────────────────────────────────────────────────────────────
+function onIdChange(newId){
+  if(!newId) return;
+  if(rows.length>0 && currentId && newId!==currentId){
+    showModal(
+      '⚠ 切換編號',
+      `切換編號將清空目前已輸入的 ${rows.length} 列資料，確定繼續嗎？`,
+      ()=>{ $('id-sel').value=newId; applyId(newId); }
+    );
+    $('id-sel').value=currentId; // restore while modal is open
+  } else {
+    applyId(newId);
+  }
+}
+
+function applyId(id){
+  currentId=id; rows=[]; uidSeq=0;
+  const badge=$('id-badge');
+  badge.textContent=id; badge.style.display='inline-block';
+  $('st-id').textContent=`編號：${id}`;
+  $('btn-add').disabled=false;
+  $('btn-issues').disabled=false;
+  $('hint').classList.add('on');
+  syncUI();
+  renderTable();
+  addEmptyRow();
+}
+
+// ── Row management ─────────────────────────────────────────────────────────
+function addEmptyRow(){
+  if(!currentId) return;
+  rows.push({uid:uidSeq++, serial:'', issue:'', remark:''});
+  renderTable();
+  syncUI();
+  focusLastSerial();
+}
+
+function deleteRow(uid){
+  rows=rows.filter(r=>r.uid!==uid);
+  renderTable(); syncUI();
+}
+
+function getRow(uid){ return rows.find(r=>r.uid===uid); }
+
+function focusLastSerial(){
+  setTimeout(()=>{
+    const all=document.querySelectorAll('.inp-serial');
+    if(all.length) all[all.length-1].focus();
+  },40);
+}
+
+function focusRowIssue(uid){
+  const sel=document.querySelector(`.sel-issue[data-uid="${uid}"]`);
+  if(sel) sel.focus();
+}
+
+function focusRowSerial(uid){
+  const inp=document.querySelector(`.inp-serial[data-uid="${uid}"]`);
+  if(inp) inp.focus();
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderTable(){
+  const tbody=$('tbody');
+  tbody.innerHTML='';
+
+  if(rows.length===0){
+    tbody.innerHTML=`<tr><td colspan="5">
+      <div class="empty"><div class="ico">&#128203;</div>
+      <p>點擊「＋ 新增列」或等待掃描器輸入</p></div>
+    </td></tr>`;
+    return;
+  }
+
+  rows.forEach((row,idx)=>{
+    const tr=document.createElement('tr');
+    tr.dataset.uid=row.uid;
+    const issDisp = row.issue
+      ? `<div class="issue-display filled" data-uid="${row.uid}" tabindex="0" onclick="openIssuePicker(${row.uid},${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openIssuePicker(${row.uid},${idx})}"><span class="issue-val">${esc(row.issue)}</span><span class="issue-arr">▶</span></div>`
+      : `<div class="issue-display"        data-uid="${row.uid}" tabindex="0" onclick="openIssuePicker(${row.uid},${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openIssuePicker(${row.uid},${idx})}"><span class="issue-val">— 選擇問題點 —</span><span class="issue-arr">▶</span></div>`;
+    tr.innerHTML=`
+      <td class="n">${idx+1}</td>
+      <td class="serial">
+        <input class="inp-serial" type="text" spellcheck="false" autocomplete="off"
+          data-uid="${row.uid}" value="${esc(row.serial)}" placeholder="掃描或輸入序號…">
+      </td>
+      <td class="issue">${issDisp}</td>
+      <td class="remark">
+        <input class="inp-remark" type="text" data-uid="${row.uid}"
+          value="${esc(row.remark)}" placeholder="備註（選填）">
+      </td>
+      <td class="del">
+        <button class="del-btn" title="刪除" onclick="deleteRow(${row.uid})">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+
+    const serialEl = tr.querySelector('.inp-serial');
+    const remarkEl = tr.querySelector('.inp-remark');
+
+    // ── Serial events ──
+    serialEl.addEventListener('focus',()=>{ tr.classList.add('cur'); status(`第 ${idx+1} 列 → 輸入序號`); });
+    serialEl.addEventListener('blur', ()=> tr.classList.remove('cur'));
+    serialEl.addEventListener('input', e=>{ row.serial=e.target.value; flashDot(); });
+    serialEl.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key==='Tab'){
+        e.preventDefault();
+        row.serial=serialEl.value.trim();
+        serialEl.value=row.serial;
+        if(!row.serial){ status('請先輸入序號'); return; }
+        openIssuePicker(row.uid, idx);  // 開啟彈出方塊
+      }
+    });
+
+    // ── Remark event ──
+    remarkEl.addEventListener('change',e=>{ row.remark=e.target.value; });
+    remarkEl.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){ e.preventDefault(); advanceFromIssue(row.uid,idx); }
+    });
+  });
+}
+
+function advanceFromIssue(uid, idx){
+  if(idx===rows.length-1){
+    rows.push({uid:uidSeq++, serial:'', issue:'', remark:''});
+    renderTable(); syncUI();
+    focusLastSerial();
+  } else {
+    const next=rows[idx+1];
+    if(next) focusRowSerial(next.uid);
+  }
+}
+
+// ── Issue Picker ────────────────────────────────────────────────────────────
+let _pickerUid=-1, _pickerIdx=-1;
+
+function openIssuePicker(uid, idx){
+  _pickerUid=uid; _pickerIdx=idx;
+  $('ph-id').textContent=currentId;
+
+  const pre=getProblemTypes(currentId)||[];
+  const cus=loadCustom(currentId);
+  let html='';
+
+  if(pre.length){
+    html+=`<div class="picker-sec-lbl">問題點選項</div><div class="picker-grid">`;
+    pre.forEach(iss=>{
+      html+=`<button class="p-btn" data-iss="${esc(iss)}" onclick="pickIssue(this)">${esc(iss)}</button>`;
+    });
+    html+='</div>';
+  }
+  if(cus.length){
+    html+=`<div class="picker-sec-lbl">自訂選項</div><div class="picker-grid">`;
+    cus.forEach(iss=>{
+      html+=`<button class="p-btn custom" data-iss="${esc(iss)}" onclick="pickIssue(this)">${esc(iss)}</button>`;
+    });
+    html+='</div>';
+  }
+
+  $('picker-body').innerHTML=html;
+  $('picker-overlay').classList.add('on');
+
+  // 自動 focus 到目前已選的按鈕，若無則 focus 第一個
+  setTimeout(()=>{
+    const row=getRow(uid);
+    const btns=[...$('picker-body').querySelectorAll('.p-btn')];
+    const target = row?.issue
+      ? (btns.find(b=>b.dataset.iss===row.issue)||btns[0])
+      : btns[0];
+    if(target) target.focus();
+  },40);
+}
+
+function pickIssue(btn){
+  const issue=btn.dataset.iss;
+  const row=getRow(_pickerUid);
+  const idx=_pickerIdx;
+  if(row){ row.issue=issue; }
+  $('picker-overlay').classList.remove('on');
+  _pickerUid=-1; _pickerIdx=-1;
+
+  // 更新 table cell（不 re-render 整表，只換文字）
+  const disp=document.querySelector(`.issue-display[data-uid="${row?.uid}"]`);
+  if(disp){
+    disp.querySelector('.issue-val').textContent=issue;
+    disp.classList.add('filled');
+  }
+  syncUI();
+  advanceFromIssue(row?.uid, idx);
+}
+
+function closeIssuePicker(returnFocus){
+  const savedUid=_pickerUid;
+  $('picker-overlay').classList.remove('on');
+  _pickerUid=-1; _pickerIdx=-1;
+  if(returnFocus && savedUid>=0) setTimeout(()=>focusRowSerial(savedUid),30);
+}
+
+// 鍵盤導航
+document.addEventListener('keydown', e=>{
+  if(!$('picker-overlay').classList.contains('on')) return;
+  if(e.key==='Escape'){ e.preventDefault(); closeIssuePicker(true); return; }
+  if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(e.key)){
+    const btns=[...$('picker-body').querySelectorAll('.p-btn')];
+    const cur=btns.indexOf(document.activeElement);
+    if(cur<0 && btns.length){ btns[0].focus(); return; }
+    e.preventDefault();
+    const dir=(e.key==='ArrowRight'||e.key==='ArrowDown')?1:-1;
+    btns[(cur+dir+btns.length)%btns.length].focus();
+  }
+});
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+function confirmClear(){
+  showModal(
+    '⚠ 清空確認',
+    `確定清空所有 ${rows.length} 列資料？此操作無法復原。`,
+    ()=>{ rows=[]; uidSeq=0; renderTable(); syncUI(); addEmptyRow(); }
+  );
+}
+
+// ── Excel export ──────────────────────────────────────────────────────────
+function exportExcel(){
+  const valid = rows.filter(r=>r.serial||r.issue);
+  if(valid.length===0){ alert('沒有資料可匯出'); return; }
+
+  const wb = XLSX.utils.book_new();
+  if(TM_IDS.has(currentId)){
+    buildTM(wb, valid);
+  } else {
+    buildCtrl(wb, valid);
+  }
+
+  const name=`${getFilePrefix(currentId)}(${currentId})-${today()}.xlsx`;
+  saveWorkbook(wb, name);
+}
+
+async function saveWorkbook(wb, name){
+  const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+
+  if(window.showSaveFilePicker){
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{description:'Excel 檔案', accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      status(`已匯出：${handle.name}`);
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError'){ status('已取消匯出'); return; }
+      // 不支援或失敗時退回預設下載方式
+    }
+  }
+
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  status(`已匯出：${name}`);
+}
+
+/* ── Style helpers (xlsx-js-style) ─────────────────────────────────────── */
+const _BD = {style:'thin', color:{rgb:'000000'}};
+const _BORD = {top:_BD, bottom:_BD, left:_BD, right:_BD};
+function _cs(fillRgb, sz=11, ha='left'){
+  const s={border:_BORD, font:{sz, name:'Arial'}, alignment:{horizontal:ha, vertical:'center', wrapText:false}};
+  if(fillRgb) s.fill={patternType:'solid', fgColor:{rgb:fillRgb}};
+  return s;
+}
+function _sc(ws, r, c, sty){
+  const a=XLSX.utils.encode_cell({r,c});
+  if(!ws[a]) ws[a]={t:'s',v:''};
+  ws[a].s=sty;
+}
+function _sRow(ws, r, c0, c1, sty){ for(let c=c0;c<=c1;c++) _sc(ws,r,c,sty); }
+
+const S_YHDR  = _cs('FFFF00', 14,'center'); // 黃色 header 14pt
+const S_YSTAT = _cs('FFFF00', 18,'center'); // 黃色 統計表 header 18pt
+const S_RED   = _cs('FF0000', 14,'center'); // 紅色 合計列
+const S_NORM  = _cs(null,     14,'left');   // 一般資料列
+const S_NORMC = _cs(null,     14,'center'); // 一般資料列（置中）
+const S_NORMR = _cs(null,     14,'right');  // 一般資料列（靠右）
+
+/* ── TM format (3 sheets) ── */
+function buildTM(wb, valid){
+  const issues = getAllIssues(currentId);
+
+  // 預先計算各問題點數量（確保匯出後立即正確，不依賴 Excel 公式重算）
+  const cntMap = {};
+  valid.forEach(r=>{ if(r.issue) cntMap[r.issue]=(cntMap[r.issue]||0)+1; });
+  const totalCnt = valid.filter(r=>r.issue).length;
+
+  /* ── Sheet 1: RAW DATA ── */
+  const raw = [
+    [null, null, {t:'s',v:'',f:'"資料數:"&(COUNTA(B:B)-1)'},
+     null,null,null,null,null,null,
+     'DCI返還-第一次',null,null,'DCI返還-第二次',null,null],
+    ['項次','序號','產線不良原因','治具覆測原因','機台複測','覆測照片',
+     '寄出','覆測時間','備註','DCI返還','複驗','複驗問題','DCI返還','複驗','複驗問題'],
+  ];
+  valid.forEach((r,i)=>{
+    raw.push([i+1, r.serial||null, r.issue||null,
+      null,null,null,null,null, r.remark||null,
+      null,null,null,null,null,null]);
+  });
+  const wsRaw = XLSX.utils.aoa_to_sheet(raw);
+
+  // Row 1: DCI merged headers — no fill, borders
+  const S_DCI1 = _cs(null,11,'center');
+  _sRow(wsRaw, 0, 9, 14, S_DCI1);
+
+  // Row 2: 主欄 A-I 黃色 header；DCI J-O 無底色
+  _sRow(wsRaw, 1, 0,  8, S_YHDR);
+  _sRow(wsRaw, 1, 9, 14, S_DCI1);
+
+  // Data rows: 全部欄位加框線
+  valid.forEach((_,i)=>{
+    _sRow(wsRaw, i+2, 0,  8, S_NORM);
+    _sRow(wsRaw, i+2, 9, 14, S_NORMC);
+  });
+
+  wsRaw['!merges'] = [
+    {s:{r:0,c:9}, e:{r:0,c:11}},
+    {s:{r:0,c:12},e:{r:0,c:14}},
+  ];
+  wsRaw['!cols'] = [
+    {wch:9.1},{wch:23.4},{wch:30.3},{wch:17.6},{wch:21.8},{wch:15.1},
+    {wch:10.3},{wch:15.1},{wch:23.0},{wch:11.3},{wch:6.8},{wch:18.8},
+    {wch:12.1},{wch:5.6},{wch:10.8},
+  ];
+  XLSX.utils.book_append_sheet(wb, wsRaw, 'RAW DATA');
+
+  /* ── Sheet 2: 總數量統計 ── */
+  const statData = [['問題點','數量統計']];
+  issues.forEach((iss,i)=>{
+    const cnt = cntMap[iss]||0;
+    // v = 預算數量（立即正確）；f = 公式（日後手動在 Excel 修改後可重算）
+    statData.push([iss, {t:'n', v:cnt, f:`COUNTIF('RAW DATA'!C:C,A${i+2})`}]);
+  });
+  const sumRow = issues.length+1;
+  statData.push(['數量統計', {t:'n', v:totalCnt, f:`SUM(B2:B${sumRow})`}]);
+
+  const wsStat = XLSX.utils.aoa_to_sheet(statData);
+
+  // Row 1: 黃色 18pt
+  _sc(wsStat, 0, 0, S_YSTAT);
+  _sc(wsStat, 0, 1, S_YSTAT);
+  // Data rows: 無底色 11pt
+  issues.forEach((_,i)=>{
+    _sc(wsStat, i+1, 0, S_NORM);
+    _sc(wsStat, i+1, 1, S_NORMC);
+  });
+  // 合計列: A=紅色，B=無底色
+  _sc(wsStat, sumRow, 0, S_RED);
+  _sc(wsStat, sumRow, 1, S_NORMC);
+
+  wsStat['!cols'] = [{wch:22},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsStat, '總數量統計');
+
+  /* ── Sheet 3: 送檢清單空白表格 ── */
+  // 右側統計欄改為指向 RAW DATA（與 總數量統計 一致），預算正確數值
+  const blankRows = [['序號','問題點',null,null,null,null,'問題點','數量統計']];
+  issues.forEach((iss,i)=>{
+    const row = new Array(8).fill(null);
+    row[6] = iss;
+    const cnt = cntMap[iss]||0;
+    row[7] = {t:'n', v:cnt, f:`COUNTIF('RAW DATA'!C:C,G${i+2})`};
+    blankRows.push(row);
+  });
+  const bTotal = issues.length+1;
+  const bTotRow = new Array(8).fill(null);
+  bTotRow[6] = '數量統計';
+  bTotRow[7] = {t:'n', v:totalCnt, f:`SUM(H2:H${issues.length+1})`};
+  blankRows.push(bTotRow);
+
+  const wsBlank = XLSX.utils.aoa_to_sheet(blankRows);
+
+  // Row 1: A-B 無底色；G-H 黃色 18pt
+  _sc(wsBlank, 0, 0, S_NORMC);
+  _sc(wsBlank, 0, 1, S_NORMC);
+  _sc(wsBlank, 0, 6, S_YSTAT);
+  _sc(wsBlank, 0, 7, S_YSTAT);
+  // Data rows: A-B 有框；G-H 無底色
+  issues.forEach((_,i)=>{
+    _sc(wsBlank, i+1, 0, S_NORM);
+    _sc(wsBlank, i+1, 1, S_NORM);
+    _sc(wsBlank, i+1, 6, S_NORM);
+    _sc(wsBlank, i+1, 7, S_NORMC);
+  });
+  // 合計列: G=紅色，H=無底色
+  _sc(wsBlank, bTotal, 6, S_RED);
+  _sc(wsBlank, bTotal, 7, S_NORMC);
+
+  wsBlank['!cols'] = [{wch:22},{wch:18},{wch:6},{wch:6},{wch:6},{wch:6},{wch:22},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsBlank, '送檢清單空白表格');
+}
+
+/* ── Controller format (1 sheet) ── */
+function buildCtrl(wb, valid){
+  const seqHdr = SEQ_HEADER[currentId]||'序號';
+  const data = [['項次', seqHdr, '故障現象', '備註']];
+  valid.forEach((r,i)=>{
+    data.push([i+1, r.serial||null, r.issue||null, r.remark||null]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Header row: 無底色，字體 12pt，全框線
+  const S_H12  = _cs(null,14,'center');
+  const S_N12  = _cs(null,14,'left');
+  const S_N12C = _cs(null,14,'center');
+  _sc(ws,0,0,S_H12); _sc(ws,0,1,S_H12); _sc(ws,0,2,S_H12); _sc(ws,0,3,S_H12);
+  valid.forEach((_,i)=>{
+    _sc(ws,i+1,0,S_N12C);
+    _sc(ws,i+1,1,S_N12C);
+    _sc(ws,i+1,2,S_N12);
+    _sc(ws,i+1,3,S_N12);
+  });
+
+  ws['!cols'] = [{wch:6},{wch:24},{wch:50},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, '工作表1');
+}
+
+populateIdSelect();
+</script>
+</body>
+</html>
